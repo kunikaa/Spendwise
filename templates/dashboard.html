@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SpendWise Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>📊 SpendWise Dashboard</h1>
+    <p>Total Expenses: <b>₹{{ total }}</b></p>
+
+    <h2>By Category</h2>
+    <ul>
+      {% for cat, amt in by_category.items() %}
+        <li>{{ cat }}: ₹{{ amt }}</li>
+      {% endfor %}
+    </ul>
+
+    <h2>All Expenses</h2>
+    <table>
+      <tr>
+        <th>Date</th>
+        <th>Category</th>
+        <th>Amount</th>
+        <th>Description</th>
+      </tr>
+      {% for row in tables %}
+      <tr>
+        <td>{{ row['date'] }}</td>
+        <td>{{ row['category'] }}</td>
+        <td>₹{{ row['amount'] }}</td>
+        <td>{{ row['description'] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <a href="/"><button>⬅ Back</button></a>
+  </div>
+</body>
+</html>

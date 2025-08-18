@@ -1,64 +1,67 @@
-from flask import Flask, render_template, request, redirect, url_for
-import sqlite3
+from flask import Flask, render_template, request
 import pandas as pd
+import matplotlib.pyplot as plt
 import os
 
 app = Flask(__name__)
-DB_NAME = "expenses.db"
 
-# --- Database Init ---
-def init_db():
-    with sqlite3.connect(DB_NAME) as conn:
-        cur = conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS expenses
-                       (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        date TEXT,
-                        category TEXT,
-                        amount REAL,
-                        description TEXT)''')
-    conn.close()
+UPLOAD_FOLDER = "uploads"
+CHART_FOLDER = "static/charts"
 
-init_db()
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["CHART_FOLDER"] = CHART_FOLDER
 
-# --- Routes ---
-@app.route('/')
+# Make sure folders exist
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(CHART_FOLDER, exist_ok=True)
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    return render_template('index.html')
+    charts = []  # store paths of charts
 
-@app.route('/add', methods=['POST'])
-def add_expense():
-    date = request.form['date']
-    category = request.form['category']
-    amount = request.form['amount']
-    description = request.form['description']
+    if request.method == "POST":
+        file = request.files["file"]
+        if file:
+            filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+            file.save(filepath)
 
-    with sqlite3.connect(DB_NAME) as conn:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO expenses (date, category, amount, description) VALUES (?, ?, ?, ?)",
-                    (date, category, amount, description))
-        conn.commit()
-    return redirect(url_for('dashboard'))
+            # Read CSV
+            df = pd.read_csv(filepath)
 
-@app.route('/upload', methods=['POST'])
-def upload_csv():
-    file = request.files['file']
-    if file and file.filename.endswith('.csv'):
-        df = pd.read_csv(file)
-        with sqlite3.connect(DB_NAME) as conn:
-            df.to_sql('expenses', conn, if_exists='append', index=False)
-    return redirect(url_for('dashboard'))
+            # ✅ Pie Chart
+            category_summary = df.groupby("Category")["Amount"].sum()
+            plt.figure(figsize=(6,6))
+            category_summary.plot(kind="pie", autopct="%1.1f%%")
+            plt.title("Expense Distribution by Category")
+            pie_path = os.path.join(app.config["CHART_FOLDER"], "pie.png")
+            plt.savefig(pie_path)
+            plt.close()
+            charts.append(pie_path)
 
-@app.route('/dashboard')
-def dashboard():
-    with sqlite3.connect(DB_NAME) as conn:
-        df = pd.read_sql_query("SELECT * FROM expenses", conn)
-    
-    # Basic summary
-    total = df['amount'].sum() if not df.empty else 0
-    by_category = df.groupby('category')['amount'].sum().to_dict() if not df.empty else {}
-    
-    return render_template('dashboard.html', tables=df.to_dict(orient='records'),
-                           total=total, by_category=by_category)
+            # ✅ Bar Chart
+            plt.figure(figsize=(8,5))
+            category_summary.plot(kind="bar", color="skyblue")
+            plt.title("Expenses by Category")
+            plt.ylabel("Amount")
+            bar_path = os.path.join(app.config["CHART_FOLDER"], "bar.png")
+            plt.savefig(bar_path)
+            plt.close()
+            charts.append(bar_path)
 
-if __name__ == '__main__':
+            # ✅ Line Chart (expenses over time if Date column exists)
+            if "Date" in df.columns:
+                df["Date"] = pd.to_datetime(df["Date"])
+                time_summary = df.groupby("Date")["Amount"].sum()
+                plt.figure(figsize=(8,5))
+                time_summary.plot(kind="line", marker="o")
+                plt.title("Expenses Over Time")
+                plt.ylabel("Amount")
+                line_path = os.path.join(app.config["CHART_FOLDER"], "line.png")
+                plt.savefig(line_path)
+                plt.close()
+                charts.append(line_path)
+
+    return render_template("index.html", charts=charts)
+
+if __name__ == "__main__":
     app.run(debug=True)
